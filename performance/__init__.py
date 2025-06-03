@@ -1,0 +1,25 @@
+from .performance import PerformanceCOCOA
+from .plot_summaries import plot_residual_event, plot_residual_cell, plot_residual_cell_for_one_event
+from .plot_event_displays import plot_evolution, plot_evolution_raw_nn, plot_evolution_raw_nn_dist
+from .plot_ensembles import plot_residual_event_ens, plot_ensemble_size_comparison
+
+PerformanceCOCOA.plot_residual_event = plot_residual_event
+PerformanceCOCOA.plot_residual_cell = plot_residual_cell
+PerformanceCOCOA.plot_residual_cell_for_one_event = plot_residual_cell_for_one_event
+
+PerformanceCOCOA.plot_evolution = plot_evolution
+PerformanceCOCOA.plot_evolution_raw_nn = plot_evolution_raw_nn
+PerformanceCOCOA.plot_evolution_raw_nn_dist = plot_evolution_raw_nn_dist
+
+PerformanceCOCOA.plot_residual_event_ens = plot_residual_event_ens
+PerformanceCOCOA.plot_ensemble_size_comparison = plot_ensemble_size_comparison
+
+
+# for particle flow
+from .performance import PFPerformanceCOCOA
+from .plot_event_displays_pf import plot_pf_event_display, get_rgb, plot_pf_event_display_old, plot_pf_event_display_v2
+
+PFPerformanceCOCOA.plot_pf_event_display = plot_pf_event_display
+PFPerformanceCOCOA.get_rgb = get_rgb
+PFPerformanceCOCOA.plot_pf_event_display_old = plot_pf_event_display_old
+PFPerformanceCOCOA.plot_pf_event_display_v2 = plot_pf_event_display_v2

@@ -1,0 +1,31 @@
+gpu: 0
+chunk_size: 100
+batch_size: 500
+num_workers: 1
+
+
+model:
+  config_path_mv : saved_checkpoints/multipart/config_mv.yml
+  config_path_t  : saved_checkpoints/multipart/config_t.yml
+  checkpoint_path: saved_checkpoints/multipart/checkpoints/epoch=57-val/loss=3.5826.ckpt
+
+  n_steps: 4 # 5 # 25
+  n_steps_to_store: 2 #5
+
+items:
+  - info: "test dataset"
+    run_pred: true
+    run_plot: true
+    n_ensemble: 2 # 10
+    save_ensemble_components: true
+
+    truth_path: path_to_multipart_data/test.root
+    pred_path: null
+
+    dir_flag: lolox # n_steps_25
+    entry_start: 0
+    n_events: 2 # 10000
+
+    plots:
+      scatter: {}
+      leading_jet_res: {pt_xrange: [-30, 30], eta_xrange: [-0.15, 0.15], phi_xrange: [-0.15, 0.15]}

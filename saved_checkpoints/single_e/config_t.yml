@@ -1,0 +1,42 @@
+project_name: sup_res_single_e
+run_name: fullxtrainxcont
+
+detector: COCOA
+dataset: single_e
+
+res_factor: 2
+device: cuda
+
+ddp: false
+
+one_event_train: false # true | false
+one_event_idx: 2
+
+reduce_ds_train: -1
+reduce_ds_val  : 1000
+
+num_epochs: 100
+eval_every_n_epoch: 1
+
+batch_size_train: 25
+effective_batch_size_train: -1
+batch_size_val: 50
+
+num_workers: 2
+
+learningrate: 1.0e-3
+lr_scheduler:
+    name: CustomLRScheduler
+    warm_start_epochs: 0.05
+    cosine_epochs: 0.8
+    eta_min: 1.0e-5
+    last_epoch: -1
+    max_epochs: take_as_num_epochs
+    
+train_path: path_to_single_e_data/train.root
+val_path  : path_to_single_e_data/val.root
+
+base_root_dir  : path_to_exp_dir
+n_event_displays: 5
+
+resume_from_checkpoint: null

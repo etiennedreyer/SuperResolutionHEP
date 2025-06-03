@@ -1,0 +1,138 @@
+name: "flow matching"
+
+graph_building: all2all # all2all | predefined
+res_factor: 2
+
+flow_model:
+
+    init_weights:
+        all_linear: xavier_uniform # xavier_uniform | null # 1
+        layer_emb_table: normal # normal | null # 2
+        time_step_embedder: normal # normal | null # 3
+        ln_modulation: zero # zero | null # 4
+        v_t_pred_linear: zero # zero | null # 5
+
+    final_modulation: true # true | false
+
+    sigma_min: 1.0e-5
+    n_steps: 10
+
+    time_embedding_size: 64
+    h_dim: 256
+
+    etaphi_emb:
+        input_size: 3
+        output_size: 32
+        hidden_layers: [64]
+        activation: "LeakyReLU"
+        final_activation: "LeakyReLU"
+        norm_layer: "LayerNorm"
+        norm_final_layer: false
+        dropout: 0.0
+
+    layer_emb:
+        emb_dim: 5
+        dense_config:
+            input_size: 5
+            output_size: 32
+            hidden_layers: [64]
+            activation: "LeakyReLU"
+            final_activation: "LeakyReLU"
+            norm_layer: "LayerNorm"
+            norm_final_layer: false
+            dropout: 0.0
+
+    e_proxy_emb:
+        input_size: 1
+        output_size: 31
+        hidden_layers: [64]
+        activation: "LeakyReLU"
+        final_activation: "LeakyReLU"
+        norm_layer: "LayerNorm"
+        norm_final_layer: false
+        dropout: 0.0
+
+    noisy_input_emb:
+        input_size: 1
+        output_size: 64
+        hidden_layers: [64]
+        activation: "LeakyReLU"
+        final_activation: "LeakyReLU"
+        norm_layer: "LayerNorm"
+        norm_final_layer: false
+        dropout: 0.0
+
+    feat_0_mlp:
+        input_size: -1
+        output_size: 256
+        hidden_layers: []
+        activation: "LeakyReLU"
+        final_activation: "LeakyReLU"
+        norm_layer: "LayerNorm"
+        norm_final_layer: false
+        dropout: 0.0
+        context_size: 10
+
+    transformer:
+        type: 'DiT' # 'GPT-2+Normformer' | 'DiT'
+        num_heads: 4
+        num_transformer_layers: 6
+        dense_config: 
+            hidden_layers: [256]
+            activation: "LeakyReLU"
+            final_activation: "LeakyReLU"
+            norm_layer: "LayerNorm"
+            norm_final_layer: false
+            dropout: 0.0
+
+    v_t_pred:
+        input_size: 256
+        output_size: 1
+        hidden_layers: [128, 64, 32]
+        activation: "LeakyReLU"
+        final_activation: null
+        norm_layer: "LayerNorm"
+        norm_final_layer: "LayerNorm" # false
+        dropout: 0.0
+
+
+var_transform:
+    x: {
+        "transformation": null,
+        "scale_mode": "standard",
+        "mean": 2.155, "std": 1225.709,
+        "min": -3796.160, "max": 3796.160, "range": [-1,1]}
+
+    y: {
+        "transformation": null,
+        "scale_mode": "standard",
+        "mean": 0.786, "std": 1223.816,
+        "min": -3796.160, "max": 3796.160, "range": [-1,1]}
+    
+    z: {
+        "transformation": null,
+        "scale_mode": "standard",
+        "mean": 0.090, "std": 295.135,
+        "min": -5504.766, "max": 5504.766, "range": [-1,1]}
+
+    eta: {
+        "transformation": null,
+        "scale_mode": "min_max",
+        "mean": null, "std": null,
+        "min": -2.988, "max": 2.988, "range": [-1,1]}
+
+    e: {
+        "transformation": "pow(x,m)",
+        "m": 0.2,
+        "scale_mode": "standard",
+        "mean": null, "std": null,
+        "min": null, "max": null, "range": [-2, 2]}
+
+
+target_transform: {
+    "transformation": "logit_ratio",
+    "f": 1.2, "alpha": 1.0e-6,
+    "scale_mode": "standard",
+    "mean": -1.1424768, "std": 3.616942 # computed ignoring the zero ratios
+}
+

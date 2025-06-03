@@ -1,0 +1,52 @@
+project_name: sr_pf
+run_name: lowxv18x1
+
+dataset: multipart
+
+resolution: low # options: low | high
+device: cuda
+
+###
+drop_single_part_events: false # useful when training only kinematics
+
+energy_threshold: 1.0 # MeV cut
+
+reduce_ds_train: -1 # only integers are allowed
+reduce_ds_val  : -1 # only integers are allowed
+
+num_epochs: 150
+eval_every_n_epoch: 1
+
+use_sampler: true
+n_sq_sum_threshold_train: "2138**2 * 25"
+n_sq_sum_threshold_val: "3000**2 * 120"
+
+batch_size_train: 30
+batch_size_val: 120
+
+num_workers: 1
+
+learningrate: 1.0e-3
+lr_scheduler:
+    name: CustomLRScheduler
+    warm_start_epochs: 0.05
+    cosine_epochs: 0.8
+    eta_min: 5.0e-6
+    last_epoch: -1
+    max_epochs: take_as_num_epochs
+    
+train_glob_arg : "path_to_sr_inference_on_multipart_data/train_n_steps_25_e_inc/train_pred_*_*.root"
+val_glob_arg   : "path_to_sr_inference_on_multipart_data/val_n_steps_25_e_inc/val_pred_*_*.root"
+
+base_root_dir  : path_to_exp_dir
+
+resume_from_checkpoint: null
+
+###
+loss_on_inc_wts: true ### Incidence loss
+
+card_loss_weight: 1.0
+# pt_loss_wt : 0.0 # keep this zero if particle_dep_e is the energy target
+# eta_loss_wt: 500.0
+# phi_loss_wt: 5.0
+# e_loss_wt  : 1.0

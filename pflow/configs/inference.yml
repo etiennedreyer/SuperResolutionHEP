@@ -1,0 +1,47 @@
+gpu: 1
+chunk_size: 100
+batch_size: 25
+num_workers: 1
+precision: medium
+use_sampler: true
+
+model:
+
+  # low resolution model
+  config_path_mv : saved_checkpoints/pf_lr/config_mv.yml
+  config_path_t  : saved_checkpoints/pf_lr/config_t.yml
+  checkpoint_path: saved_checkpoints/pf_lr/checkpoints/epoch=107-val_loss_to_optimize_on=0.4034.ckpt
+
+  # # high resolution model
+  # config_path_mv : saved_checkpoints/pf_hr/config_mv.yml
+  # config_path_t  : saved_checkpoints/pf_hr/config_t.yml
+  # checkpoint_path: saved_checkpoints/pf_hr/checkpoints/epoch=98-val_loss_to_optimize_on=0.3318.ckpt
+
+
+
+
+
+
+items:
+  - info: "test dataset"
+    run_pred: true
+
+    store_inc_wt: false
+
+    glob_arg: "path_to_sr_inference_on_multipart_data/test_n_steps_25_e_inc/test_pred_*_*.root"
+    pred_path: null
+
+    pred_file_name: test_pred.root
+    reduce_ds : -1 # only integers are allowed
+
+
+  - info: "test dataset for pf ed"
+    run_pred: true
+
+    store_inc_wt: true
+
+    glob_arg: "path_to_sr_inference_on_multipart_data/test_n_steps_25_e_inc/test_pred_*_*.root"
+    pred_path: null
+
+    pred_file_name: test_pred_e_raw_inc.root
+    reduce_ds : 600 # only integers are allowed
