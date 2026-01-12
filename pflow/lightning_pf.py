@@ -24,6 +24,7 @@ import pandas as pd
 from sklearn.metrics import confusion_matrix
 
 from pytorch_lightning.utilities import grad_norm
+from pytorch_lightning.utilities import rank_zero_only
 
 
 class PflowLightning(LightningModule):
@@ -56,6 +57,7 @@ class PflowLightning(LightningModule):
         if kin_pred_cfg.get('use_attn_kinematics', False):
             self.net.kinematics_predictor.kin_net.set_trans_dicts(self.transform_dicts)
 
+        self._val_outputs = []
         self.automatic_optimization = False
         self.reset_kin_plot_dict()
 
@@ -87,11 +89,11 @@ class PflowLightning(LightningModule):
                 batch_size=self.config_t['batch_size_train'], 
                 n_sq_sum_threshold=self.config_t['n_sq_sum_threshold_train'], drop_last=False)
             loader = DataLoader(ds, num_workers=self.config_t["num_workers"],
-                batch_sampler=batch_sampler, pin_memory=True,
+                batch_sampler=batch_sampler, pin_memory=True, persistent_workers=True,
                 collate_fn=lambda x: collate_fn(x, self.config_mv['pf_model']['max_particles']))
         else:
             loader = DataLoader(ds, batch_size=self.config_t['batch_size_train'], 
-                num_workers=self.config_t['num_workers'], shuffle=True,
+                num_workers=self.config_t['num_workers'], shuffle=True, persistent_workers=True,
                 collate_fn=lambda x: collate_fn(x, self.config_mv['pf_model']['max_particles']))
 
         return loader
@@ -109,11 +111,11 @@ class PflowLightning(LightningModule):
                 batch_size=self.config_t['batch_size_val'], 
                 n_sq_sum_threshold=self.config_t['n_sq_sum_threshold_val'], drop_last=False)
             loader = DataLoader(ds, num_workers=self.config_t["num_workers"],
-                batch_sampler=batch_sampler, pin_memory=True,
+                batch_sampler=batch_sampler, pin_memory=True, persistent_workers=True,
                 collate_fn=lambda x: collate_fn(x, self.config_mv['pf_model']['max_particles']))
         else:
             loader = DataLoader(ds, batch_size=self.config_t['batch_size_val'],
-                num_workers=self.config_t['num_workers'], shuffle=False,
+                num_workers=self.config_t['num_workers'], shuffle=False, persistent_workers=True,
                 collate_fn=lambda x: collate_fn(x, self.config_mv['pf_model']['max_particles']))
 
         return loader
@@ -173,7 +175,7 @@ class PflowLightning(LightningModule):
         log_dict = {}
         for k, v in dict_to_log.items():
             log_dict[f'train/{k}'] = v
-        self.log_dict(log_dict, batch_size=bs)
+        self.log_dict(log_dict, batch_size=bs, on_step=False, on_epoch=True)
 
         return loss_to_optimize_on
 
@@ -216,7 +218,9 @@ class PflowLightning(LightningModule):
                     kin_pred[bs_i, ind_bsi, 2][mask_bsi].detach().cpu().numpy())
                 self.kin_plot_dict['pred_e_raw'].append(
                     self.transform_dicts['e'].inverse(kin_pred[bs_i, ind_bsi, 3][mask_bsi]).detach().cpu().numpy())
-                
+
+        self._val_outputs.append((log_dict, card_plot_dict))
+
         return log_dict, card_plot_dict
 
 
@@ -239,20 +243,22 @@ class PflowLightning(LightningModule):
         return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
 
-    def on_before_optimizer_step(self, optimizer, optimizer_idx):
-        norms = grad_norm(self.net, norm_type=2)
-        norms2store = {
-            'grad_2.0_norm_total': norms['grad_2.0_norm_total']
-        }
-        self.log_dict(norms2store)
+    # def on_before_optimizer_step(self, optimizer):
+    #     norms = grad_norm(self.net, norm_type=2)
+    #     norms2store = {
+    #         'grad_2.0_norm_total': norms['grad_2.0_norm_total']
+    #     }
+    #     self.log_dict(norms2store, on_step=False, on_epoch=True)
 
 
-    def training_epoch_end(self, outputs):
+    def on_train_epoch_end(self):
         self.log('lr', self.optimizers().param_groups[0]['lr'])
         self.lr_schedulers().step()
 
 
-    def validation_epoch_end(self, outputs):
+    def on_validation_epoch_end(self):
+        outputs = self._val_outputs
+
         epoch_end_log_dict = {}
         for key in outputs[0][0].keys():
             epoch_end_log_dict[key] = np.hstack([x[0][key] for x in outputs]).mean().item()
@@ -270,6 +276,8 @@ class PflowLightning(LightningModule):
             fig = self.plot_perf_kinematics()
             self.log_image(fig, 'kinematics')
             self.reset_kin_plot_dict()
+
+        self._val_outputs.clear()
             
 
     def plot_perf_card(self, truth, pred):
@@ -329,6 +337,7 @@ class PflowLightning(LightningModule):
         return text
     
 
+    @rank_zero_only
     def log_image(self, fig, name):
         if self.comet_logger is not None:
             canvas = FigureCanvas(fig)
