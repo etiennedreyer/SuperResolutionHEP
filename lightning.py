@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 plt.style.use('seaborn-v0_8-whitegrid')
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
-from pytorch_lightning.utilities import grad_norm
+from pytorch_lightning.utilities import grad_norm, rank_zero_only
 
 
 
@@ -52,6 +52,8 @@ class SupResLightning(LightningModule):
         self.stored_loss = None
         self.stored_idxs = None
 
+        self._val_outputs = []
+
     def set_comet_logger(self, comet_logger):
         self.comet_logger = comet_logger
 
@@ -67,10 +69,10 @@ class SupResLightning(LightningModule):
                 batch_size=self.config_t['batch_size_train'], 
                 n_sq_sum_threshold=self.config_t['n_sq_sum_threshold_train'], drop_last=False)
             loader = DataLoader(ds, num_workers=self.config_t["num_workers"],
-                collate_fn=collate_graphs, batch_sampler=batch_sampler, pin_memory=True)
+                collate_fn=collate_graphs, batch_sampler=batch_sampler, pin_memory=True, persistent_workers=True)
         else:
             loader = DataLoader(ds, batch_size=self.config_t['batch_size_train'], 
-                num_workers=self.config_t['num_workers'], shuffle=True, collate_fn=collate_graphs)
+                num_workers=self.config_t['num_workers'], shuffle=True, collate_fn=collate_graphs, persistent_workers=True)
 
         return loader
 
@@ -86,10 +88,10 @@ class SupResLightning(LightningModule):
                 batch_size=self.config_t['batch_size_val'], 
                 n_sq_sum_threshold=self.config_t['n_sq_sum_threshold_val'], drop_last=False)
             loader = DataLoader(ds, num_workers=self.config_t["num_workers"],
-                collate_fn=collate_graphs_plus, batch_sampler=batch_sampler, pin_memory=True)
+                collate_fn=collate_graphs_plus, batch_sampler=batch_sampler, pin_memory=True, persistent_workers=True)
         else:
             loader = DataLoader(ds, batch_size=self.config_t['batch_size_val'], 
-                num_workers=self.config_t['num_workers'], shuffle=False, collate_fn=collate_graphs_plus)
+                num_workers=self.config_t['num_workers'], shuffle=False, collate_fn=collate_graphs_plus, persistent_workers=True)
 
         return loader
 
@@ -97,13 +99,13 @@ class SupResLightning(LightningModule):
     def training_step(self, batch, batch_idx):
         with torch.autograd.set_detect_anomaly(True):
             loss, _dict , loss_detached = self.net.get_loss(batch)
-            self.log_dict(_dict)
+            self.log_dict(_dict, on_step=False, on_epoch=True)
 
             self.stored_loss = loss_detached
             self.stored_idxs = batch['idx']
 
             bs = batch['q_mask'].shape[0]
-            self.log('train/loss', loss.item(), batch_size=bs)
+            self.log('train/loss', loss.item(), batch_size=bs, on_step=False, on_epoch=True)
             return loss.mean()
 
 
@@ -159,6 +161,8 @@ class SupResLightning(LightningModule):
 
             self.perf_live.update(batch, pred)
 
+        self._val_outputs.append(return_dict)
+
         return return_dict
 
 
@@ -184,51 +188,56 @@ class SupResLightning(LightningModule):
         return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
 
-    def on_before_optimizer_step(self, optimizer, optimizer_idx):
-        # Compute the 2-norm for each layer
-        norms = grad_norm(self.net, norm_type=2)
-        norms2store = {
-            'grad_2.0_norm_total': norms['grad_2.0_norm_total']
-        }
-        # find the maximum norm
-        max_norm = 0; max_norm_key = ''
-        for k, v in norms.items():
-            if 'grad_2.0_norm' in k and 'total' not in k:
-                if v > max_norm:
-                    max_norm = v
-                    max_norm_key = k
+    # def on_before_optimizer_step(self, optimizer, optimizer_idx):
+    #     # Compute the 2-norm for each layer
+    #     norms = grad_norm(self.net, norm_type=2)
+    #     norms2store = {
+    #         'grad_2.0_norm_total': norms['grad_2.0_norm_total']
+    #     }
+    #     # find the maximum norm
+    #     max_norm = 0; max_norm_key = ''
+    #     for k, v in norms.items():
+    #         if 'grad_2.0_norm' in k and 'total' not in k:
+    #             if v > max_norm:
+    #                 max_norm = v
+    #                 max_norm_key = k
 
-        norms2store['grad_2.0_norm_max'] = max_norm
-        if 'grad_2.0_norm' in max_norm_key:
-            norms2store[max_norm_key] = norms[max_norm_key]
+    #     norms2store['grad_2.0_norm_max'] = max_norm
+    #     if 'grad_2.0_norm' in max_norm_key:
+    #         norms2store[max_norm_key] = norms[max_norm_key]
 
-        if max_norm == 0:
-            print('max norm grad is zero')
-            for k, v in norms.items():
-                print('\t', k, v)
+    #     if max_norm == 0:
+    #         print('max norm grad is zero')
+    #         for k, v in norms.items():
+    #             print('\t', k, v)
             
-            print()
-            print('stored_loss')
-            print(f'\tmin: {self.stored_loss.min().item()}')
-            print(f'\tmax: {self.stored_loss.max().item()}')
-            print(f'\tmean: {self.stored_loss.mean().item()}')
-            print(f'\tstd: {self.stored_loss.std().item()}')
-            print(f'\tshape: {self.stored_loss.shape}')
-            print(f'\tfinite_count: {torch.isfinite(self.stored_loss).sum().item()}')
+    #         print()
+    #         print('stored_loss')
+    #         print(f'\tmin: {self.stored_loss.min().item()}')
+    #         print(f'\tmax: {self.stored_loss.max().item()}')
+    #         print(f'\tmean: {self.stored_loss.mean().item()}')
+    #         print(f'\tstd: {self.stored_loss.std().item()}')
+    #         print(f'\tshape: {self.stored_loss.shape}')
+    #         print(f'\tfinite_count: {torch.isfinite(self.stored_loss).sum().item()}')
 
-            print('stored_idxs')
-            print(f'\t{self.stored_idxs}')
+    #         print('stored_idxs')
+    #         print(f'\t{self.stored_idxs}')
 
-        self.log_dict(norms2store)
+    #     self.log_dict(norms2store)
 
 
-    def training_epoch_end(self, outputs):
+    def on_train_epoch_end(self):
         self.log('lr', self.optimizers().param_groups[0]['lr'])
         if self.config_t['lr_scheduler'] is not None:
             self.lr_schedulers().step()
 
 
-    def validation_epoch_end(self, outputs):
+    def on_validation_epoch_end(self):
+
+        if self.trainer.sanity_checking:
+            print("exiting")
+            return
+        outputs = self._val_outputs
 
         _val_loss_n_nodes = np.array([out['val_loss_n_nodes'] for out in outputs])
         _val_loss = np.array([out['val_loss'] for out in outputs])
@@ -244,8 +253,6 @@ class SupResLightning(LightningModule):
             if p_i == self.config_t.get('n_event_displays', -1):
                 break
             fig = plt.figure(figsize=(16.5, 7.5), dpi=100, tight_layout=True)
-            for k, v in pl_dict.items():
-                print(k, v.shape)
             graph2img_scd(pl_dict, fig)
             self.log_image(fig, f'ED_{p_i}')
 
@@ -258,8 +265,10 @@ class SupResLightning(LightningModule):
         self.log_image(fig, 'residual_cell_energy')
 
         self.perf_live.reset()
+        self._val_outputs.clear()
             
 
+    @rank_zero_only
     def log_image(self, fig, name):
         if self.comet_logger is not None:
             canvas = FigureCanvas(fig)

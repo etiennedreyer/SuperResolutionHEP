@@ -55,9 +55,8 @@ if __name__ == "__main__":
 
     net = SupResLightning(config_mv, config_t)
 
-    replace_sampler_ddp = True
     num_dev = -1
-    strategy = None
+    strategy = config_t.get('strategy', 'auto')
 
     # for saving checkpoints for best 3 models (according to val loss) and last epoch
     checkpoint_callback = ModelCheckpoint(
@@ -79,7 +78,6 @@ if __name__ == "__main__":
             devices = num_dev,
             default_root_dir = config_t["base_root_dir"],
             strategy = strategy,
-            replace_sampler_ddp = replace_sampler_ddp,
             callbacks = [checkpoint_callback],
             check_val_every_n_epoch = config_t['eval_every_n_epoch'],
             # gradient_clip_val=1.0
@@ -111,7 +109,6 @@ if __name__ == "__main__":
             devices = num_dev,
             default_root_dir = config_t["base_root_dir"],
             strategy = strategy,
-            replace_sampler_ddp = replace_sampler_ddp,
             callbacks = [checkpoint_callback],
             check_val_every_n_epoch = config_t['eval_every_n_epoch'],
             log_every_n_steps = 1,

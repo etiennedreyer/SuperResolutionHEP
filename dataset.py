@@ -40,14 +40,19 @@ class SupResDataset(Dataset):
         self.data_dict = {}
         var_list = [
             'cell_eta', 'cell_phi', 'cell_layer', 'cell_e',
-            'cell_to_cell_edge_start', 'cell_to_cell_edge_end',
             'cell_x', 'cell_y', 'cell_z'
         ]
+        if self.config_mv['graph_building'] == 'predefined':
+            var_list += [
+                'cell_to_cell_edge_start_high', 'cell_to_cell_edge_end_high'
+            ]
 
         #loading the data
         for var in var_list:
+            print(f'loading {var}_low ... ')
             self.data_dict[f'{var}_low']  = self.tree_low[var].array(
                 library='np', entry_start=entry_start, entry_stop=entry_stop)
+            print(f'loading {var}_high ... ')
             self.data_dict[f'{var}_high'] = self.tree_high[var].array(
                 library='np', entry_start=entry_start, entry_stop=entry_stop)
             
@@ -55,11 +60,13 @@ class SupResDataset(Dataset):
             part_var_list = [
                 'particle_pt', 'particle_eta', 'particle_phi', 'particle_e', 'particle_pdgid', 'particle_dep_energy']
             for var in part_var_list:
+                print(f'loading {var} ... ')
                 self.data_dict[var] = self.tree_low[var].array(
                     library='np', entry_start=entry_start, entry_stop=entry_stop)
 
             # need these to compute particle dep energy while ignoring hcal cells
             for var in ['particle_to_node_idx', 'particle_to_node_weight']:
+                print(f'loading {var} ... ')
                 self.data_dict[var] = self.tree_high[var].array(
                     library='np', entry_start=entry_start, entry_stop=entry_stop)
             
