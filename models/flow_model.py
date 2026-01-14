@@ -26,20 +26,29 @@ class FlowModel(nn.Module):
         
         self.config = model_config
 
+        ### Experimental: testing how x1 regression compares to flow matching
+        self.one_shot = self.config.get('one_shot', False)
+        if self.one_shot:
+            print('\033[96m' + 'Using one-shot energy regression model' + '\033[0m')
+
         self.n_steps = self.config['n_steps']
 
         self.sigma_min = self.config['sigma_min']
         self.flow_match_obj = TargetConditionalFlowMatcher(sigma=self.sigma_min)
 
-        self.time_step_embedder = TimestepEmbedder(
-            self.config['time_embedding_size'])
+        if not self.one_shot:
+            self.time_step_embedder = TimestepEmbedder(
+                self.config['time_embedding_size'])
 
         self.h_dim = int(self.config['h_dim'])
         self.context_size = self.config['time_embedding_size'] + \
             self.config['etaphi_emb']['output_size'] + \
             self.config['layer_emb']['dense_config']['output_size'] + \
             self.config['e_proxy_emb']['output_size'] + 1
-        self.context_size = self.config['time_embedding_size']
+        if self.one_shot:
+            self.context_size = 0
+        else:
+            self.context_size = self.config['time_embedding_size']
 
         etaphi_emb_config = self.config['etaphi_emb']
         etaphi_emb_config['context_size'] = self.context_size ##
@@ -63,6 +72,9 @@ class FlowModel(nn.Module):
         self.noisy_input_emb_net = Dense(**noisy_input_emb_config)
 
         self.context_size_plus = self.context_size + self.cond_emb_dim
+
+        if self.one_shot:
+            noisy_input_emb_config['output_size'] = 0
 
         # needed purely for dimensionality matching
         feat_0_mlp_config = self.config['feat_0_mlp']
@@ -130,11 +142,12 @@ class FlowModel(nn.Module):
             print('\033[96m' + 'Initializing layer embedding table with normal (std=0.02)' + '\033[0m')
             nn.init.normal_(self.layer_emb_table.weight, std=0.02)
 
-        # Initialize timestep embedding MLP:
-        if self.config['init_weights'].get('time_step_embedder', None) == 'normal':
-            print('\033[96m' + 'Initializing time_step_embedder with normal (std=0.02)' + '\033[0m')
-            nn.init.normal_(self.time_step_embedder.mlp[0].weight, std=0.02)
-            nn.init.normal_(self.time_step_embedder.mlp[2].weight, std=0.02)
+        if not self.one_shot:
+            # Initialize timestep embedding MLP:
+            if self.config['init_weights'].get('time_step_embedder', None) == 'normal':
+                print('\033[96m' + 'Initializing time_step_embedder with normal (std=0.02)' + '\033[0m')
+                nn.init.normal_(self.time_step_embedder.mlp[0].weight, std=0.02)
+                nn.init.normal_(self.time_step_embedder.mlp[2].weight, std=0.02)
 
         # zero-out the adaLN modulation layers in DiTLayers
         if self.config['init_weights'].get('ln_modulation', None) == 'zero':
@@ -170,8 +183,13 @@ class FlowModel(nn.Module):
                 - noising the target energy
                 - noising the (target-proxy) energy
         '''
-        # time embedding
-        time_emb = self.time_step_embedder(time_step)
+        if self.one_shot:
+            ### won't be using these guys
+            noisy_input = None
+            time_emb = None
+        else:
+            # time embedding
+            time_emb = self.time_step_embedder(time_step)
 
         if verbose:
             torch.set_printoptions(precision=3)
@@ -179,7 +197,7 @@ class FlowModel(nn.Module):
                 if isinstance(val, torch.Tensor):
                     print(key, val.shape, torch.isfinite(val).all())
 
-        if verbose:
+        if verbose and not self.one_shot:
             print('time_emb:')
             print('\t', self.get_stat(time_emb))
         
@@ -211,19 +229,26 @@ class FlowModel(nn.Module):
             torch.sum(q_mask, dim=1, keepdim=True)
 
 
-        # encode noisy input
-        noisy_input_emb = self.noisy_input_emb_net(noisy_input, context=time_emb)
+        if self.one_shot:
+            noisy_input_emb = None
+        else:
+            # encode noisy input
+            noisy_input_emb = self.noisy_input_emb_net(noisy_input, context=time_emb)
 
-        if verbose:
+        if verbose and not self.one_shot:
             print('noisy_input_emb:')
             print('\t', self.get_stat(noisy_input_emb))
 
-        # context (t, global)
-        context = torch.cat([time_emb, cond_feat_global], dim=-1)
+        if self.one_shot:
+            context = cond_feat_global
+            feat_0 = cond_feat
+        else:
+            # context (t, global)
+            context = torch.cat([time_emb, cond_feat_global], dim=-1)
 
-        feat_0 = torch.cat([
-            cond_feat, noisy_input_emb
-        ], dim=-1)
+            feat_0 = torch.cat([
+                cond_feat, noisy_input_emb
+            ], dim=-1)
 
         feat = self.feat_0_mlp(feat_0, context=context)
 
@@ -269,10 +294,15 @@ class FlowModel(nn.Module):
             t=0: noise data, t=1: real data
         '''
         target = batch['target']
-        x_0 = torch.randn_like(target)
-        # t = torch.Tensor(np.random.power(2, size=x_0.shape[0])).to(x_0.device)
-        t = torch.rand((x_0.size(0),), dtype=x_0.dtype, device=x_0.device)
-        t, xt, ut = self.flow_match_obj.sample_location_and_conditional_flow(x_0, target, t=None)
+        if self.one_shot:
+            xt = None
+            t = None
+            ut = target
+        else:
+            x_0 = torch.randn_like(target)
+            # t = torch.Tensor(np.random.power(2, size=x_0.shape[0])).to(x_0.device)
+            t = torch.rand((x_0.size(0),), dtype=x_0.dtype, device=x_0.device)
+            t, xt, ut = self.flow_match_obj.sample_location_and_conditional_flow(x_0, target, t=None)
 
         vt = self.forward(batch, xt, t)
         loss = F.mse_loss(vt, ut, reduction='none')[batch['q_mask']]
@@ -307,6 +337,9 @@ class FlowModel(nn.Module):
             method: integration method
             ret_seq: return the entire sequence or just the last step
         '''
+        if self.one_shot:
+            return self.forward(batch, None, None)
+
         if n_steps is None:
             n_steps = self.n_steps
 
